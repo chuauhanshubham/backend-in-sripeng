@@ -1,3 +1,6 @@
-2025/06/14-12:25:59.284 1c4 Reusing MANIFEST C:\Users\Rudram\Desktop\backend in sripeng\session_data\Default\Session Storage/MANIFEST-000001
-2025/06/14-12:25:59.294 1c4 Recovering log #3
-2025/06/14-12:25:59.297 1c4 Reusing old log C:\Users\Rudram\Desktop\backend in sripeng\session_data\Default\Session Storage/000003.log 
+2025/06/14-12:26:42.227 2ff0 Reusing MANIFEST C:\Users\Rudram\Desktop\backend in sripeng\session_data\Default\Session Storage/MANIFEST-000001
+2025/06/14-12:26:42.234 2ff0 Recovering log #3
+2025/06/14-12:26:42.236 2ff0 Reusing old log C:\Users\Rudram\Desktop\backend in sripeng\session_data\Default\Session Storage/000003.log 
+2025/06/14-12:34:41.395 2ff0 Level-0 table #5: started
+2025/06/14-12:34:41.403 2ff0 Level-0 table #5: 16716 bytes OK
+2025/06/14-12:34:41.405 2ff0 Delete type=0 #3
