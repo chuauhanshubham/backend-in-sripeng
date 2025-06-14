@@ -1,0 +1,495 @@
+// Constants
+const URL = "https://www.my11circle.com/mecspa/lobby";
+const SESSION_PATH = path.join(__dirname, "session_data");
+const REQUEST_TIMEOUT = 30000;
+const MAX_RETRIES = 5;
+const RETRY_DELAY = 1000;
+const BROWSER_LAUNCH_INTERVAL = 60000; // 1 minute
+
+// Firebase Paths
+const FIREBASE_PATHS = {
+  MATCHES: 'matches',
+  LIVE_MATCHES: 'live_matches',
+  UPCOMING_MATCHES: 'upcoming_matches',
+  COMPLETED_MATCHES: 'completed_matches',
+  LIVE_DETAILS: 'live_details',
+  SCOREBOARDS: 'scoreboards',
+  CONTESTS: 'contests',
+  STATUS: 'scraper_status'
+};
+// Data Scraping Functions
+const scrapeMatchTabs = async () => {
+  return await retryOperation(async () => {
+    await ensureLogin();
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1920, height: 1080 });
+
+    try {
+      await page.goto(URL, { 
+        waitUntil: "networkidle2", 
+        timeout: REQUEST_TIMEOUT 
+      });
+
+      const tabs = [
+        { id: "ft_Tabs_Upcoming", name: "upcoming" },
+        { id: "ft_Tabs_Live", name: "live" },
+        { id: "ft_Tabs_Completed", name: "completed" }
+      ];
+
+      const allMatches = { upcoming: [], live: [], completed: [] };
+
+      for (const tab of tabs) {
+        const tabSelector = `div[testid='${tab.id}']`;
+        
+        try {
+          // Click tab if not active
+          await page.evaluate((selector) => {
+            const tab = document.querySelector(selector);
+            if (tab && tab.classList.contains("ft-tab-inactive")) {
+              tab.click();
+            }
+          }, tabSelector);
+
+          await page.waitForSelector("div[id^='ft-fixture-card-new']", { timeout: 15000 });
+          await sleep(2000); // Wait for data to load
+
+          const html = await page.content();
+          const $ = cheerio.load(html);
+
+          $("div[id^='ft-fixture-card-new']").each((_, el) => {
+            try {
+              const matchId = $(el).attr("matchid");
+              const seriesName = $(el).find(".fixture-card-header").text().trim();
+              const teamAName = $(el).find("span[testid^='team-a']").text().trim();
+              const teamALogo = $(el).find("div#ft-team-badge .flag-containerNew img").first().attr("src");
+              const teamBName = $(el).find("span[testid^='team-b']").text().trim();
+              const teamBLogo = $(el).find("div#ft-team-badge .flag-containerNew img").last().attr("src");
+              const matchTime = $(el).find("div[testid^='match-status']").text().trim();
+              const matchStatus = $(el).find(".fixture-card-footer").text().trim();
+
+              if (matchId && teamAName && teamBName) {
+                const matchData = {
+                  matchId,
+                  seriesName: seriesName || 'No Series',
+                  teamA: teamAName,
+                  teamALogo: teamALogo || '',
+                  teamB: teamBName,
+                  teamBLogo: teamBLogo || '',
+                  matchTime: matchTime || 'Time not available',
+                  matchStatus: matchStatus || 'Status not available',
+                  state: tab.name,
+                  timestamp: new Date().toISOString()
+                };
+
+                allMatches[tab.name].push(matchData);
+              }
+            } catch (err) {
+              log(`Error parsing match element: ${err.message}`, 'error');
+            }
+          });
+        } catch (err) {
+          log(`Failed to scrape ${tab.name} matches: ${err.message}`, 'warn');
+        }
+      }
+
+      // Update Firebase
+      await updateMatchesInFirebase(allMatches);
+      return allMatches;
+    } finally {
+      await page.close();
+    }
+  }, 'scrapeMatchTabs');
+};
+
+const updateMatchesInFirebase = async (matchesData) => {
+  try {
+    const updates = {};
+    
+    // Update all matches
+    updates[FIREBASE_PATHS.MATCHES] = {
+      ...matchesData,
+      lastUpdated: new Date().toISOString()
+    };
+    
+    // Update individual categories
+    updates[FIREBASE_PATHS.UPCOMING_MATCHES] = matchesData.upcoming;
+    updates[FIREBASE_PATHS.LIVE_MATCHES] = matchesData.live;
+    updates[FIREBASE_PATHS.COMPLETED_MATCHES] = matchesData.completed;
+    
+    await update(ref(database), updates);
+    log("Matches data updated in Firebase");
+  } catch (err) {
+    log(`Failed to update Firebase: ${err.message}`, 'error');
+    throw err;
+  }
+};
+
+const scrapeLiveMatchDetails = async (matchId) => {
+  return await retryOperation(async () => {
+    await ensureLogin();
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1920, height: 1080 });
+
+    try {
+      const url = `https://www.my11circle.com/mecspa/lobby/live-contests/${matchId}`;
+      log(`Fetching live match details for ${matchId}`);
+
+      await page.goto(url, { 
+        waitUntil: "networkidle2", 
+        timeout: REQUEST_TIMEOUT 
+      });
+      
+      await page.waitForSelector(".score-book", { timeout: 15000 });
+      await sleep(2000); // Wait for data to load
+
+      const content = await page.content();
+      const $ = cheerio.load(content);
+
+      const teamA = $(".sc-headTeamInfo .sc-teamInfoName").first().text().trim() || "Team A";
+      const teamB = $(".sc-headTeamInfo .sc-teamInfoName").last().text().trim() || "Team B";
+      const matchStatus = $(".sc-matchStatus").text().trim() || "In Progress";
+
+      // Batsmen Data
+      const batsmen = [];
+      $(".batsmen .batsman").each((i, el) => {
+        const name = $(el).find(".name").text().trim();
+        const runs = $(el).find(".runs").text().trim() || "0";
+        const balls = $(el).find(".ball").text().trim() || "0";
+        const fours = $(el).find(".fours").text().trim() || "0";
+        const sixes = $(el).find(".sixes").text().trim() || "0";
+        const strikeRate = $(el).find(".strike-rate").text().trim() || "0";
+        const strike = $(el).hasClass("strike");
+
+        if (name) batsmen.push({ name, runs, balls, fours, sixes, strikeRate, strike });
+      });
+
+      // If no striker found, mark first batsman as striker
+      if (batsmen.length > 0 && !batsmen.some(b => b.strike)) {
+        batsmen[0].strike = true;
+      }
+
+      // Bowlers Data
+      const bowlers = [];
+      $(".bowlers .bowler").each((i, el) => {
+        const name = $(el).find(".name").text().trim();
+        const wickets = $(el).find(".wickets").text().trim() || "0";
+        const overs = $(el).find(".ball").text().trim() || "0";
+        const economy = $(el).find(".economy").text().trim() || "0";
+
+        if (name) bowlers.push({ name, wickets, overs, economy });
+      });
+
+      // This Over Data
+      const thisOver = [];
+      $(".score-book .delivery").each((i, el) => {
+        const ball = $(el).text().trim();
+        if (ball) thisOver.push(ball);
+      });
+
+      const matchData = {
+        matchId,
+        teamA,
+        teamB,
+        matchStatus,
+        isLive: true,
+        batsmen,
+        bowlers,
+        thisOver,
+        timestamp: new Date().toISOString()
+      };
+
+      // Update Firebase
+      await set(ref(database, `${FIREBASE_PATHS.LIVE_DETAILS}/${matchId}`), matchData);
+      return matchData;
+    } finally {
+      await page.close();
+    }
+  }, `scrapeLiveMatchDetails(${matchId})`);
+};
+
+const scrapeScoreboard = async (matchId) => {
+  return await retryOperation(async () => {
+    await ensureLogin();
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1920, height: 1080 });
+
+    try {
+      const url = `https://www.my11circle.com/mecspa/lobby/scoreboard/${matchId}`;
+      log(`Fetching scoreboard for match ${matchId}`);
+
+      await page.goto(url, { 
+        waitUntil: "networkidle2", 
+        timeout: REQUEST_TIMEOUT 
+      });
+      
+      await page.waitForSelector(".page_coninner_autoheight", { timeout: 15000 });
+      await sleep(2000); // Wait for data to load
+
+      const content = await page.content();
+      const $ = cheerio.load(content);
+      const container = $('.page_coninner_autoheight');
+
+      const matchDetails = {
+        matchId,
+        teamA: container.find(".sc-headTeamInfo .sc-teamInfoName").first().text().trim() || "",
+        teamB: container.find(".sc-headTeamInfo .sc-teamInfoName").last().text().trim() || "",
+        currentScore: container.find(".text-black-50.small.text-center").text().trim() || "",
+        matchStatus: container.find(".sc-matchStatus").text().trim() || "In Progress",
+        innings: [],
+        timestamp: new Date().toISOString()
+      };
+
+      // Scrape Each Innings
+      container.find(".inning-banner").each((i, el) => {
+        const innings = {
+          teamName: $(el).find(".team-name").text().trim() || "",
+          score: $(el).find(".inning-score .score").text().trim() || "",
+          runRate: $(el).find(".inning-run-rate").text().trim() || "",
+          batsmen: [],
+          bowlers: [],
+          extras: $(el).next(".innings-card").find(".row.header .col-2").text().trim() || "",
+          total: $(el).next(".innings-card").find(".row.total .col-5 span").text().trim() || "",
+        };
+
+        // Scrape Batsmen
+        $(el).next(".innings-card").find(".score-table .row:not(.header)").each((j, row) => {
+          const name = $(row).find(".col-6 div").first().text().trim();
+          const status = $(row).find(".col-6 .status").text().trim();
+          const runs = $(row).find(".col-1.runs").text().trim();
+          const balls = $(row).find(".col-1").eq(1).text().trim();
+          const fours = $(row).find(".col-1").eq(2).text().trim();
+          const sixes = $(row).find(".col-1").eq(3).text().trim();
+          const strikeRate = $(row).find(".col-2").text().trim();
+
+          if (name && runs && balls) {
+            innings.batsmen.push({
+              name,
+              status,
+              runs,
+              balls,
+              fours,
+              sixes,
+              strikeRate
+            });
+          }
+        });
+
+        // Scrape Bowlers
+        $(el).next(".innings-card").find(".score-table.bowling .row:not(.header)").each((j, row) => {
+          const name = $(row).find(".col-6 div").first().text().trim() || "";
+          const overs = $(row).find(".col-1").eq(0).text().trim() || "0";
+          const maidens = $(row).find(".col-1").eq(1).text().trim() || "0";
+          const runs = $(row).find(".col-1").eq(2).text().trim() || "0";
+          const wickets = $(row).find(".col-1").eq(3).text().trim() || "0";
+          const economy = $(row).find(".col-2").text().trim() || "0";
+
+          if (name) {
+            innings.bowlers.push({ name, overs, maidens, runs, wickets, economy });
+          }
+        });
+
+        matchDetails.innings.push(innings);
+      });
+
+      // Update Firebase
+      await set(ref(database, `${FIREBASE_PATHS.SCOREBOARDS}/${matchId}`), matchDetails);
+      return matchDetails;
+    } finally {
+      await page.close();
+    }
+  }, `scrapeScoreboard(${matchId})`);
+};
+
+const scrapeContests = async (matchId) => {
+  return await retryOperation(async () => {
+    await ensureLogin();
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1920, height: 1080 });
+
+    try {
+      const url = `https://www.my11circle.com/mecspa/lobby/contests/${matchId}`;
+      log(`Fetching contests for match ${matchId}`);
+
+      await page.goto(url, { 
+        waitUntil: "networkidle2", 
+        timeout: REQUEST_TIMEOUT 
+      });
+      
+      await page.waitForSelector('div[id="ft-contest-card"]', { timeout: 15000 });
+      await sleep(2000); // Wait for data to load
+
+      const content = await page.content();
+      const $ = cheerio.load(content);
+      const contests = [];
+
+      $('div[id="ft-contest-card"]').each((_, el) => {
+        try {
+          const contestId = $(el).attr('id').replace('ft-contest-card-', '');
+          const contest = {
+            contestId,
+            name: $(el).find('.contestRewampLeftHeader').text().trim() || "Unnamed Contest",
+            totalPrize: $(el).find('[testid^="newContestCardPrizeAmount"]').text().trim() || '0',
+            entryFee: $(el).find('[testid^="entry-fee"]').text().trim() || '0',
+            winners: $(el).find('[testid^="newContestnoOfWinners"]').text().replace('Winners :', '').trim() || '0',
+            teamsJoined: {
+              current: $(el).find('[testid^="wc-ps-teams-joined-count"]').text()
+                .match(/\d+/g)?.[0]?.replace(/,/g, '') || "0",
+              max: $(el).find('[testid^="wc-ps-teams-joined-count"]').text()
+                .match(/\d+/g)?.[1]?.replace(/,/g, '') || "0"
+            },
+            progress: $(el).find('.progress-bar').attr('style')?.match(/\d+\.?\d*/)?.[0] || "0",
+            type: "REGULAR"
+          };
+
+          if (contest.entryFee === "Free") {
+            contest.type = "PRACTICE";
+            contest.totalPrize = "Practice Contest";
+          }
+
+          contests.push(contest);
+        } catch (err) {
+          log(`Error parsing contest element: ${err.message}`, 'error');
+        }
+      });
+
+      // Update Firebase
+      await set(ref(database, `${FIREBASE_PATHS.CONTESTS}/${matchId}`), {
+        timestamp: new Date().toISOString(),
+        contests
+      });
+      
+      return contests;
+    } finally {
+      await page.close();
+    }
+  }, `scrapeContests(${matchId})`);
+};
+
+// Real-time Data Updater for Live Matches
+const startLiveDataUpdater = () => {
+  setInterval(async () => {
+    try {
+      // Get all live matches from Firebase
+      const snapshot = await get(ref(database, FIREBASE_PATHS.LIVE_MATCHES));
+      const liveMatches = snapshot.val() || [];
+      
+      if (liveMatches.length === 0) {
+        log("No live matches found");
+        return;
+      }
+
+      log(`Updating data for ${liveMatches.length} live matches...`);
+      
+      for (const match of liveMatches) {
+        try {
+          // Update live details
+          await scrapeLiveMatchDetails(match.matchId);
+          
+          // Update scoreboard
+          await scrapeScoreboard(match.matchId);
+          
+          // Update contests
+          await scrapeContests(match.matchId);
+          
+          log(`Successfully updated data for match ${match.matchId}`);
+        } catch (err) {
+          log(`Failed to update match ${match.matchId}: ${err.message}`, 'error');
+        }
+      }
+      
+      log("Live matches data update completed");
+    } catch (err) {
+      log(`Live data updater failed: ${err.message}`, 'error');
+    }
+  }, 30000); // Update every 30 seconds
+};
+
+// API Endpoints
+app.get("/status", async (req, res) => {
+  try {
+    const status = {
+      status: 'active',
+      loggedIn: isLoggedIn,
+      lastUpdate: new Date().toISOString(),
+      firebaseConnected: database ? true : false
+    };
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to get status" });
+  }
+});
+
+app.get("/matches", async (req, res) => {
+  try {
+    const snapshot = await get(ref(database, FIREBASE_PATHS.MATCHES));
+    res.json(snapshot.val() || {});
+  } catch (err) {
+    res.status(500).json({ error: "Failed to get matches" });
+  }
+});
+
+app.get("/matches/upcoming", async (req, res) => {
+  try {
+    const snapshot = await get(ref(database, FIREBASE_PATHS.UPCOMING_MATCHES));
+    res.json({
+      timestamp: new Date().toISOString(),
+      matches: snapshot.val() || []
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to get upcoming matches" });
+  }
+});
+
+app.get("/matches/live", async (req, res) => {
+  try {
+    const snapshot = await get(ref(database, FIREBASE_PATHS.LIVE_MATCHES));
+    res.json({
+      timestamp: new Date().toISOString(),
+      matches: snapshot.val() || []
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to get live matches" });
+  }
+});
+
+app.get("/matches/completed", async (req, res) => {
+  try {
+    const snapshot = await get(ref(database, FIREBASE_PATHS.COMPLETED_MATCHES));
+    res.json({
+      timestamp: new Date().toISOString(),
+      matches: snapshot.val() || []
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to get completed matches" });
+  }
+});
+
+app.get("/matches/:matchId/live-details", async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const snapshot = await get(ref(database, `${FIREBASE_PATHS.LIVE_DETAILS}/${matchId}`));
+    res.json(snapshot.val() || {});
+  } catch (err) {
+    res.status(500).json({ error: "Failed to get live match details" });
+  }
+});
+
+app.get("/matches/:matchId/scoreboard", async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const snapshot = await get(ref(database, `${FIREBASE_PATHS.SCOREBOARDS}/${matchId}`));
+    res.json(snapshot.val() || {});
+  } catch (err) {
+    res.status(500).json({ error: "Failed to get scoreboard" });
+  }
+});
+
+app.get("/matches/:matchId/contests", async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const snapshot = await get(ref(database, `${FIREBASE_PATHS.CONTESTS}/${matchId}`));
+    res.json(snapshot.val() || { contests: [] });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to get contests" });
+  }
+});
