@@ -1,14 +1,5 @@
-2025/06/14-12:47:18.856 190 Reusing MANIFEST C:\Users\Rudram\Desktop\backend in sripeng\session_data\Default\Local Storage\leveldb/MANIFEST-000001
-2025/06/14-12:47:18.861 190 Recovering log #39
-2025/06/14-12:47:18.862 190 Level-0 table #42: started
-2025/06/14-12:47:18.886 190 Level-0 table #42: 39449 bytes OK
-2025/06/14-12:47:18.890 190 Delete type=0 #39
-2025/06/14-12:47:18.891 74 Compacting 4@0 + 1@1 files
-2025/06/14-12:47:18.903 74 Generated table #44@0: 51 keys, 94140 bytes
-2025/06/14-12:47:18.903 74 Compacted 4@0 + 1@1 files => 94140 bytes
-2025/06/14-12:47:18.904 74 compacted to: files[ 0 1 0 0 0 0 0 ]
-2025/06/14-12:47:18.904 74 Delete type=2 #34
-2025/06/14-12:47:18.904 74 Delete type=2 #36
-2025/06/14-12:47:18.905 74 Delete type=2 #38
-2025/06/14-12:47:18.905 74 Delete type=2 #40
-2025/06/14-12:47:18.905 74 Delete type=2 #42
+2025/06/14-12:57:58.245 2fc4 Reusing MANIFEST C:\Users\Rudram\Desktop\backend in sripeng\session_data\Default\Local Storage\leveldb/MANIFEST-000001
+2025/06/14-12:57:58.246 2fc4 Recovering log #53
+2025/06/14-12:57:58.247 2fc4 Level-0 table #57: started
+2025/06/14-12:57:58.254 2fc4 Level-0 table #57: 46419 bytes OK
+2025/06/14-12:57:58.268 2fc4 Delete type=0 #53

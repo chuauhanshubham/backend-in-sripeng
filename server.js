@@ -924,34 +924,28 @@ const startServer = async () => {
   try {
     console.log('🚀 Starting server...');
     
-    // Launch browser and check login
-    const browserLaunched = await launchBrowser();
-    if (!browserLaunched) {
-      throw new Error('Failed to launch browser');
+    // Only launch browser if not in production (for debugging)
+    if (process.env.NODE_ENV !== 'production') {
+      const browserLaunched = await launchBrowser();
+      if (!browserLaunched) throw new Error('Failed to launch browser');
+      
+      const loggedIn = await isLoggedIn();
+      if (!loggedIn) {
+        console.log("🔑 Login Required!");
+        // Handle login requirement for production
+      }
+      
+      startScraping();
     }
     
-    const loggedIn = await isLoggedIn();
-    if (!loggedIn) {
-      console.log("🔑 Login Required! Opening browser for login...");
-      if (browser) await browser.close();
-      await launchBrowser(true);
-      console.log("👉 Please login in the browser window and restart the server.");
-      return;
-    }
-    
-    console.log("✅ Logged In. Starting background scraping...");
-    startScraping();
-    
-    server.listen(5000, () => {
-      console.log("🚀 Server running on http://localhost:5000");
-      console.log("📡 WebSocket server ready for real-time updates");
+    server.listen(process.env.PORT || 5000, () => {
+      console.log(`🚀 Server running on port ${process.env.PORT || 5000}`);
     });
   } catch (error) {
     console.error('🚨 Server startup error:', error);
     process.exit(1);
   }
 };
-
 // Graceful shutdown
 process.on("SIGINT", async () => {
   console.log('🛑 Shutting down gracefully...');
