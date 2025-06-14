@@ -1,0 +1,44 @@
+2025/06/14-12:26:42.229 a84 Reusing MANIFEST C:\Users\Rudram\Desktop\backend in sripeng\session_data\Default\Local Storage\leveldb/MANIFEST-000001
+2025/06/14-12:26:42.234 a84 Recovering log #21
+2025/06/14-12:26:42.234 a84 Level-0 table #23: started
+2025/06/14-12:26:42.271 a84 Level-0 table #23: 50596 bytes OK
+2025/06/14-12:26:42.275 a84 Delete type=0 #21
+2025/06/14-12:26:42.276 2ff0 Compacting 4@0 + 1@1 files
+2025/06/14-12:26:42.315 2ff0 Generated table #25@0: 31 keys, 63430 bytes
+2025/06/14-12:26:42.315 2ff0 Compacted 4@0 + 1@1 files => 63430 bytes
+2025/06/14-12:26:42.315 2ff0 compacted to: files[ 0 1 0 0 0 0 0 ]
+2025/06/14-12:26:42.316 2ff0 Delete type=2 #13
+2025/06/14-12:26:42.316 2ff0 Delete type=2 #16
+2025/06/14-12:26:42.316 2ff0 Delete type=2 #18
+2025/06/14-12:26:42.316 2ff0 Delete type=2 #20
+2025/06/14-12:26:42.316 2ff0 Delete type=2 #23
+2025/06/14-12:27:42.288 a84 Level-0 table #27: started
+2025/06/14-12:27:42.301 a84 Level-0 table #27: 39145 bytes OK
+2025/06/14-12:27:42.305 a84 Delete type=0 #24
+2025/06/14-12:30:34.383 a84 Level-0 table #29: started
+2025/06/14-12:30:34.390 a84 Level-0 table #29: 39179 bytes OK
+2025/06/14-12:30:34.391 a84 Delete type=0 #26
+2025/06/14-12:33:43.115 a84 Level-0 table #31: started
+2025/06/14-12:33:43.122 a84 Level-0 table #31: 39381 bytes OK
+2025/06/14-12:33:43.124 a84 Delete type=0 #28
+2025/06/14-12:34:01.783 a84 Level-0 table #33: started
+2025/06/14-12:34:01.788 a84 Level-0 table #33: 40614 bytes OK
+2025/06/14-12:34:01.790 a84 Delete type=0 #30
+2025/06/14-12:34:01.804 a84 Compacting 4@0 + 1@1 files
+2025/06/14-12:34:01.818 a84 Generated table #34@0: 32 keys, 64342 bytes
+2025/06/14-12:34:01.818 a84 Compacted 4@0 + 1@1 files => 64342 bytes
+2025/06/14-12:34:01.819 a84 compacted to: files[ 0 1 0 0 0 0 0 ]
+2025/06/14-12:34:01.820 a84 Delete type=2 #25
+2025/06/14-12:34:01.820 a84 Delete type=2 #27
+2025/06/14-12:34:01.820 a84 Delete type=2 #29
+2025/06/14-12:34:01.820 a84 Delete type=2 #31
+2025/06/14-12:34:01.820 a84 Delete type=2 #33
+2025/06/14-12:35:43.040 a84 Level-0 table #36: started
+2025/06/14-12:35:43.047 a84 Level-0 table #36: 31146 bytes OK
+2025/06/14-12:35:43.048 a84 Delete type=0 #32
+2025/06/14-12:37:56.864 a84 Level-0 table #38: started
+2025/06/14-12:37:56.876 a84 Level-0 table #38: 43917 bytes OK
+2025/06/14-12:37:56.878 a84 Delete type=0 #35
+2025/06/14-12:38:43.031 a84 Level-0 table #40: started
+2025/06/14-12:38:43.037 a84 Level-0 table #40: 39549 bytes OK
+2025/06/14-12:38:43.039 a84 Delete type=0 #37
